@@ -7,7 +7,7 @@
   "author": "Anand Mohan Tumuluri <anandmohan.tumuluri@philips.com>",
   "license": "ISC",
   "dependencies": {
-    "node-fetch": "^2.6.1",
+    "node-fetch": "^3.2.1",
     "yargs": "^16.2.0"
   }
 }
