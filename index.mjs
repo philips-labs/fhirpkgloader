@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 "use strict";
 
-const path = require('path');
-const fs = require('fs');
-const fetch = require('node-fetch');
-const { hideBin } = require('yargs/helpers');
-const yargs = require('yargs/yargs');
-const opts = yargs(hideBin(process.argv)).option('iam', {
+import {dirname} from 'path';
+import { readdirSync, writeFileSync } from 'fs';
+import fetch from 'node-fetch'; 
+import {hideBin} from 'yargs/helpers';
+import Yargs from 'yargs';
+const opts = Yargs(hideBin(process.argv)).option('iam', {
   alias: 'i',
   describe: 'IAM Endpoint',
   demandOption: false,
@@ -55,8 +55,8 @@ const metadataResources = [
 
 
 async function main() {
-  const pkgPath = path.dirname(require.resolve(opts.module + '/package.json'));
-  const pkgContents = fs.readdirSync(pkgPath)
+  const pkgPath = dirname(require.resolve(opts.module + '/package.json'));
+  const pkgContents = readdirSync(pkgPath)
     .filter(i => i.endsWith('json'))
     .map(i => require(pkgPath + '/' + i))
     .filter(r => r.resourceType && metadataResources.includes(r.resourceType));
@@ -118,7 +118,7 @@ async function main() {
   }
 
   if (failures)
-    fs.writeFileSync('failures.json', JSON.stringify(failures));
+    writeFileSync('failures.json', JSON.stringify(failures));
 }
 
 main();

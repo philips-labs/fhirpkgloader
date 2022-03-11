@@ -2,7 +2,7 @@
   "name": "fhirpkgloader",
   "version": "1.0.0",
   "description": "This tool can be used to upload FHIR NPM packages from any repository to HSP CDR",
-  "main": "index.js",
+  "bin": "index.mjs",
   "keywords": [],
   "author": "Anand Mohan Tumuluri <anandmohan.tumuluri@philips.com>",
   "license": "ISC",
