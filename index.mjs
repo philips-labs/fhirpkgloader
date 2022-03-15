@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 "use strict";
 
-import {dirname} from 'path';
-import { readdirSync, writeFileSync } from 'fs';
-import fetch from 'node-fetch'; 
-import {hideBin} from 'yargs/helpers';
+import { createWriteStream, readdirSync, readFileSync } from 'fs';
+import fetch from 'node-fetch';
+import { join } from 'path';
+import { cwd } from 'process';
+import { Readable } from 'stream';
 import Yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
 const opts = Yargs(hideBin(process.argv)).option('iam', {
   alias: 'i',
   describe: 'IAM Endpoint',
@@ -48,17 +50,49 @@ const opts = Yargs(hideBin(process.argv)).option('iam', {
   describe: 'CDR tenant organization',
   demandOption: true,
   type: 'string'
+}).option('fhirVersion', {
+  alias: 'v',
+  describe: 'FHIR Version',
+  demandOption: false,
+  default: '3.0',
+  type: 'string'
 }).argv;
+
 const metadataResources = [
   'CodeSystem', 'ValueSet', 'ConceptMap', 'StructureDefinition',
   'SearchParameter', 'CompartmentDefinition', 'OperationDefinition'];
 
+async function * upload(fhir, org, version, token, items) {
+  for (const item of items) {
+    const res = await fetch(`https://${fhir}/store/fhir/${org}/${item.resourceType}`, {
+      method: 'POST', body: JSON.stringify(item),
+      headers: {
+        Accept: `application/fhir+json;fhirVersion=${version}`,
+        Authorization: `Bearer ${token}`,
+        'api-version': '1',
+        'Content-Type': `application/fhir+json;fhirVersion=${version}`,
+        'If-None-Exist': `url=${item.url}`
+      }
+    });
+
+    const out = await res.json();
+    if (res.ok) {
+      console.log(`Successfully created ${item.url} with id: ${out.id}`);
+    } else {
+      console.error(`Failed to create ${item.resourceType} with url: ${item.url || 'unknown'}.`);
+      yield JSON.stringify({
+        request: item,
+        response: out
+      }) + "\n";
+    }
+  }
+}
 
 async function main() {
-  const pkgPath = dirname(require.resolve(opts.module + '/package.json'));
+  const pkgPath = join(cwd(), 'node_modules', opts.module);
   const pkgContents = readdirSync(pkgPath)
     .filter(i => i.endsWith('json'))
-    .map(i => require(pkgPath + '/' + i))
+    .map(i => JSON.parse(readFileSync(pkgPath + '/' + i, 'utf-8')))
     .filter(r => r.resourceType && metadataResources.includes(r.resourceType));
 
   const cmp = (r) => {
@@ -91,34 +125,10 @@ async function main() {
       'api-version': 2,
       'Content-Type': 'application/x-www-form-urlencoded'
     }
-  }).then(t => t.json());
-  let failures = [];
-  for (const item of pkgContents.sort((a, b) => cmp(a) - cmp(b))) {
-    const res = await fetch(`https://${opts.fhir}/store/fhir/${opts.org}/${item.resourceType}`, {
-      method: 'POST', body: JSON.stringify(item),
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token.access_token}`,
-        'api-version': '1',
-        'Content-Type': 'application/json',
-        'If-None-Exist': `url=${item.url}`
-      }
-    });
-
-    const out = await res.json();
-    if (res.ok) {
-      console.log(`Successfully created ${item.url} with id: ${out.id}`);
-    } else {
-      console.log(`Failed to create ${item.resourceType} with url: ${item.url || 'unknown'}.`);
-      failures.push({
-        request: item,
-        response: out
-      })
-    }
-  }
-
-  if (failures)
-    writeFileSync('failures.json', JSON.stringify(failures));
+  }).then(t => t.json()).catch(e => console.error('Failed to get token', e));
+  let items = pkgContents.sort((a, b) => cmp(a) - cmp(b));
+  const resStream = Readable.from(upload(opts.fhir, opts.org, opts.fhirVersion, token.access_token, items));
+  resStream.pipe(createWriteStream('failures.json', 'utf-8'));
 }
 
 main();
