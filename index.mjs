@@ -56,13 +56,19 @@ const opts = Yargs(hideBin(process.argv)).option('iam', {
   demandOption: false,
   default: '3.0',
   type: 'string'
+}).option('disable_validation', {
+  alias: 'd',
+  describe: 'Disable FHIR validation',
+  demandOption: false,
+  default: false,
+  type: 'boolean'
 }).argv;
 
 const metadataResources = [
   'CodeSystem', 'ValueSet', 'ConceptMap', 'StructureDefinition',
   'SearchParameter', 'CompartmentDefinition', 'OperationDefinition'];
 
-async function * upload(fhir, org, version, token, items) {
+async function * upload(fhir, org, version, token, disable_validation, items) {
   for (const item of items) {
     const res = await fetch(`https://${fhir}/store/fhir/${org}/${item.resourceType}`, {
       method: 'POST', body: JSON.stringify(item),
@@ -71,11 +77,12 @@ async function * upload(fhir, org, version, token, items) {
         Authorization: `Bearer ${token}`,
         'api-version': '1',
         'Content-Type': `application/fhir+json;fhirVersion=${version}`,
-        'If-None-Exist': `url=${item.url}`
+        'If-None-Exist': `url=${item.url}`,
+        'X-validate-resource': !disable_validation
       }
     });
 
-    const out = await res.json();
+    const out = await res.json().catch(e => console.log('Invalid response', e));
     if (res.ok) {
       console.log(`Successfully created ${item.url} with id: ${out.id}`);
     } else {
@@ -127,7 +134,8 @@ async function main() {
     }
   }).then(t => t.json()).catch(e => console.error('Failed to get token', e));
   let items = pkgContents.sort((a, b) => cmp(a) - cmp(b));
-  const resStream = Readable.from(upload(opts.fhir, opts.org, opts.fhirVersion, token.access_token, items));
+  const resStream = Readable.from(upload(opts.fhir, opts.org, opts.fhirVersion,
+    token.access_token, opts.disable_validation, items));
   resStream.pipe(createWriteStream('failures.json', 'utf-8'));
 }
 
